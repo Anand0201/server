@@ -54,13 +54,37 @@ app.post("/save-subscription", async (req, res) => {
 app.get("/send-notification", async (req, res) => {
     try {
         const subscriptions = await Subscription.find();
-        subscriptions.forEach(sub => {
-            webpush.sendNotification(sub, "Hello world");
-        });
-        res.json({ status: "Success", message: "Message sent to push service" });
+        const validSubscriptions = [];
+
+        // Filter out invalid subscriptions
+        for (const sub of subscriptions) {
+            try {
+                // Attempt to send a test notification to check subscription status
+                await webpush.sendNotification(sub, "Checking subscription status");
+                validSubscriptions.push(sub);
+            } catch (err) {
+                // If sending notification fails, assume subscription is invalid
+                console.log(`Subscription ${sub._id} is no longer valid: ${err.message}`);
+                // Optionally, you can remove the invalid subscription from the database
+                // await Subscription.findByIdAndDelete(sub._id);
+            }
+        }
+
+        // Send notifications only to valid subscriptions
+        for (const sub of validSubscriptions) {
+            try {
+                await webpush.sendNotification(sub, "Hello world");
+            } catch (err) {
+                console.error(`Failed to send notification to ${sub._id}: ${err.message}`);
+                // Handle error (e.g., retry, log, etc.)
+            }
+        }
+
+        res.json({ status: "Success", message: "Notifications sent successfully" });
     } catch (err) {
+        console.error(`Error sending notifications: ${err.message}`);
         res.status(500).json({ status: "Error", message: err.message });
-    }
+    };
 });
 
 
